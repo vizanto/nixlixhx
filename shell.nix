@@ -10,6 +10,6 @@ mkShell {
     gnumake
     git
     haxe_4_nightly
-    neko
+    haxeshim.tool
   ];
 }
