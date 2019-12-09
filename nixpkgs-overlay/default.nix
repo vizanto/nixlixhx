@@ -112,12 +112,13 @@ let
       } // buildOverrides);
     }."${schema}";
 
-  fetch_haxe_libraries = { parent_name, haxelibs_json, buildOverridesMap ? {} }:
+  fetch_haxe_libraries = { parent_name, haxelibs_json, exclude ? [], buildOverridesMap ? {} }:
     let
-      libs = builtins.fromJSON (builtins.readFile haxelibs_json);
+      json = builtins.readFile haxelibs_json;
+      libs = builtins.fromJSON json;
       libraries = lib.mapAttrs
                     (k: v: fetch_haxe_library (v // { buildOverrides = buildOverridesMap."${k}" or {}; }))
-                    (builtins.removeAttrs libs ["src"]);
+                    (builtins.removeAttrs libs (["src"] ++ exclude));
     in
     {
       inherit libraries;
@@ -127,11 +128,34 @@ let
       '';
     };
 
+  fetch_haxe_libraries_dir = { name, src, buildOverridesMap ? {},  exclude ? [] } @ attrs: fetch_haxe_libraries {
+    parent_name = name;
+    haxelibs_json = haxe_libraries_json { inherit name src; };
+    inherit buildOverridesMap exclude;
+  };
+
+  patch_haxe_libraries_dir = fetched_haxe_libraries: writeScript "patch_haxe_libraries_dir" ''
+    cd haxe_libraries
+    echo --------------------------
+    ${fetched_haxe_libraries.bashArray}
+    echo
+    for lib in *; do
+      dest=''${libraries[$lib]}
+      if [[ -d $dest/src ]]; then dest="$dest/src"; fi
+      if [[ -d $dest/std ]]; then dest="$dest/std"; fi
+      grep cp $lib
+      echo fixup $lib path to: $dest
+      sed -i s"|-cp \''$.*|-cp $dest|" $lib
+      echo
+    done
+    echo --------------------------
+  '';
+
 in
 {
   ocamlPackages = ocamlPackages // extraOcamlPackages;
 
-  haxe_4_1_nightly = haxe.overrideAttrs (old: {
+  haxe_4_1_nightly-bin = haxe.overrideAttrs (old: {
     version = "4.1.0-nightly";
     src = gitsrc "haxe";
 
@@ -162,16 +186,14 @@ in
   haxeshim = haxe:
     let
       name = "haxeshim";
-      src = gitsrc "haxeshim";
-      haxelibs_json = haxe_libraries_json { inherit name src; };
-      haxe_libraries = fetch_haxe_libraries { parent_name = name; inherit haxelibs_json; };
+      haxeshim-git = gitsrc "haxeshim";
+      shim_haxe_libraries = fetch_haxe_libraries_dir { inherit name; src = haxeshim-git; };
 
-      tool = with self; stdenv.mkDerivation
+      patched-src = with self; stdenv.mkDerivation
       {
-        inherit name src;
-        version = src.rev;
-
-        buildInputs = [ haxe nodejs ];
+        inherit name;
+        version = haxeshim-git.rev;
+        src = haxeshim-git;
 
         patchPhase = ''
           echo patching HAXE_LIBCACHE location
@@ -179,27 +201,26 @@ in
               -e s"|\(this.haxelibRepo =\) \([^;]\+\);|\1 env('HAXELIB_PATH').or(\2);|" \
               -e s"|\(this.libCache =\) \([^;]\+\);|\1 env('HAXE_LIBCACHE').or(\2);|"
           grep this. src/haxeshim/Scope.hx |grep haxeshimRoot
-
-          cd haxe_libraries
-          echo --------------------------
-          ${haxe_libraries.bashArray}
-          echo
-          for lib in *; do
-            dest=''${libraries[$lib]}
-            if [[ -d $dest/src ]]; then
-              dest="$dest/src"
-            fi
-            grep cp $lib
-            echo fixup $lib path to: $dest
-            sed -i s"|-cp .*|-cp $dest|" $lib
-            echo
-          done
-          echo --------------------------
-          cd ..
-
+          ${patch_haxe_libraries_dir shim_haxe_libraries}
           echo replacing -lib with hxml paths
           sed -i s"|-lib \(.*\)|./haxe_libraries/\1.hxml|" common.hxml
         '';
+
+        buildPhase = "";
+
+        installPhase = ''
+          mkdir $out
+          cp -a * $out/
+        '';
+      };
+
+      tool = with self; stdenv.mkDerivation
+      {
+        inherit name;
+        src = patched-src;
+        version = patched-src.version;
+
+        buildInputs = [ haxe nodejs ];
 
         buildPhase = ''
           haxe all.hxml
@@ -207,8 +228,8 @@ in
         '';
 
         installPhase = ''
-          rm bin/postinstall*
-          mkdir $out
+          mkdir -p $out/share
+          mv bin/postinstall* $out/share
           cp -a bin $out
         '';
       };
@@ -223,7 +244,7 @@ in
         mkdir $out
         cd $out
 
-        # Link neko and tools
+        # Link neko and tools where haxeshim expects them
         find $(sed s'| |/bin|' $haxe/nix-support/propagated-build-inputs) -maxdepth 1 -not -type d -exec ln -vs '{}' ';'
 
         cp -av $haxe/nix-support .
@@ -235,7 +256,7 @@ in
         done;
 
         # Configure haxeshim
-        echo 'addToSearchPath HAXE_ROOT "'$out'"' >> nix-support/setup-hook
+        echo 'export HAXE_ROOT="'$out'"' >> nix-support/setup-hook
         echo '{"version": "'$version'", "resolveLibs": "scoped"}' > .haxerc
 
         # Set up shim
@@ -247,8 +268,23 @@ in
           done;
       '';
     in {
-      inherit src haxe_libraries tool scoped;
-        buildInputs = [ scoped nodejs git ];
+      inherit tool scoped;
+
+      src = patched-src;
+
+      lix = let
+        name = "lix";
+        lixsrc = gitsrc "lix";
+        lix_haxe_libraries = fetch_haxe_libraries_dir { inherit name; src = lixsrc; exclude = ["haxeshim"]; };
+      in stdenv.mkDerivation
+      {
+        inherit name tool;
+        src = lixsrc;
+
+        haxe = scoped;
+        propagatedBuildInputs = [ neko ];
+
+        buildInputs = [ scoped git nodejs ]; #TODO: ++ (with nodePackages; [ ncc graceful-fs tar yauzl ]);
 
         patchPhase = ''
           ${patch_haxe_libraries_dir lix_haxe_libraries}
@@ -258,21 +294,35 @@ in
         HAXELIB_PATH="/tmp";
         buildPhase = ''
           cp -v $haxe/.haxerc . # set scope to Haxe version
+          # make sure postinstall.js exists for npm install to work
+          mkdir bin
+          cp -av $tool/share/postinstall.js bin
+          # install js dependencies
           HOME=. npm install
+          # build
           haxe --run Build
-          chmod +x bin/*
-          ./bin/postinstall.js
         '';
 
         installPhase = ''
+          rm bin/postinstall.js
           mkdir -p $out/bin
-          cp -a bin/lix.js $out/bin/lix
+
+          # copy optimized haxe shims
+          for f in $tool/bin/haxe*shim.js; do
+            cp -av $f $out/bin/$(basename $f "shim.js")
+          done;
+
+          # copy lix
+          cp -av bin/lix.js $out/bin/lix
+
+          # copy Haxe support
+          cp -av $haxe/nix-support $out
         '';
       };
     };
 
   # Our preferred Haxe 4.1 version
-  haxe4_1 = with self; (haxeshim haxe_4_1_nightly).scoped;
+  haxeshim-haxe4_1 = with self; (haxeshim haxe_4_1_nightly-bin);
   haxe4_1 = self.haxeshim-haxe4_1.scoped;
   lix = self.haxeshim-haxe4_1.lix;
 }

@@ -9,6 +9,6 @@ mkShell {
     coreutils
     gnumake
     git
-    haxe4_1
+    lix
   ];
 }
