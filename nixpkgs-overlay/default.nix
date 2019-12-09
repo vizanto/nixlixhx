@@ -168,6 +168,7 @@ in
         ocaml
         camlp5
         sedlex
+        uchar
         ppx_tools_versioned
         xml-light
         ocaml_extlib
