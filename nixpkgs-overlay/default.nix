@@ -2,10 +2,12 @@ self: super:
 
 with super;
 let
-  gitsrc = name: fetchgit {
-    inherit (builtins.fromJSON (builtins.readFile (./. + "/${name}.json"))) url rev sha256 fetchSubmodules leaveDotGit;
+  gitsrc = name:
+    let attrs = builtins.fromJSON (builtins.readFile (./. + "/${name}.json"));
+  in fetchgit {
+    inherit (attrs) url rev sha256 fetchSubmodules leaveDotGit;
     inherit name;
-  };
+  } // { inherit (attrs) date; };
 
   extraOcamlPackages = with ocamlPackages; {
     sedlex = buildDunePackage {
@@ -90,7 +92,7 @@ in
 {
   ocamlPackages = ocamlPackages // extraOcamlPackages;
 
-  haxe_4_nightly = haxe.overrideAttrs (old: {
+  haxe_4_1_nightly = haxe.overrideAttrs (old: {
     version = "4.1.0-nightly";
     src = gitsrc "haxe";
 
@@ -118,26 +120,30 @@ in
 
   inherit haxe_libraries_json;
 
-  haxeshim =
+  haxeshim = haxe:
     let
       name = "haxeshim";
-      version = "git";
       src = gitsrc "haxeshim";
       haxelibs_json = haxe_libraries_json { inherit name src; };
-      haxe_libraries = fetch_haxe_libraries { parent_name = "haxeshim"; inherit haxelibs_json; };
-    in {
+      haxe_libraries = fetch_haxe_libraries { parent_name = name; inherit haxelibs_json; };
 
-      inherit src haxe_libraries;
+      tool = with self; stdenv.mkDerivation
+      {
+        inherit name src;
+        version = src.rev;
 
-      tool = with self; stdenv.mkDerivation {
-        inherit name version src;
-
-        buildInputs = [ nodejs haxe_4_nightly ];
+        buildInputs = [ haxe nodejs ];
 
         patchPhase = ''
-          ${haxe_libraries.bashArray}
+          echo patching HAXE_LIBCACHE location
+          sed -i src/haxeshim/Scope.hx \
+              -e s"|\(this.haxelibRepo =\) \([^;]\+\);|\1 env('HAXELIB_PATH').or(\2);|" \
+              -e s"|\(this.libCache =\) \([^;]\+\);|\1 env('HAXE_LIBCACHE').or(\2);|"
+          grep this. src/haxeshim/Scope.hx |grep haxeshimRoot
+
           cd haxe_libraries
           echo --------------------------
+          ${haxe_libraries.bashArray}
           echo
           for lib in *; do
             dest=''${libraries[$lib]}
@@ -162,9 +168,49 @@ in
         '';
 
         installPhase = ''
+          rm bin/postinstall*
           mkdir $out
-          cp -a * $out
+          cp -a bin $out
         '';
       };
+
+      scoped = runCommand "${haxe.name}-scoped" (with builtins;
+      {
+        inherit haxe tool;
+        published = haxe.src.date;
+        version = substring 0 7 haxe.src.rev;
+      })
+      ''
+        mkdir $out
+        cd $out
+
+        # Link neko and tools
+        find $(sed s'| |/bin|' $haxe/nix-support/propagated-build-inputs) -maxdepth 1 -not -type d -exec ln -vs '{}' ';'
+
+        cp -av $haxe/nix-support .
+        chmod +w nix-support/setup-hook
+
+        mkdir $out/bin
+        for f in $tool/bin/*; do
+          cp -av $f $out/bin/$(basename $f "shim.js")
+        done;
+
+        # Configure haxeshim
+        echo 'addToSearchPath HAXE_ROOT "'$out'"' >> nix-support/setup-hook
+        echo '{"version": "'$version'", "resolveLibs": "scoped"}' > .haxerc
+
+        # Set up shim
+        mkdir -p versions/$version
+        pushd versions/$version
+          echo '{"published": "'$(date -ud "$published" +'%Y-%m-%d %H:%M:%S')'"}' > version.json
+          for f in $haxe/lib/haxe/*; do
+            [[ -e `basename $f` ]] || ln -vs $f;
+          done;
+      '';
+    in {
+      inherit src haxe_libraries tool scoped;
     };
+
+  # Our preferred Haxe 4.1 version
+  haxe4_1 = with self; (haxeshim haxe_4_1_nightly).scoped;
 }

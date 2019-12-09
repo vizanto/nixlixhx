@@ -9,7 +9,6 @@ mkShell {
     coreutils
     gnumake
     git
-    haxe_4_nightly
-    haxeshim.tool
+    haxe4_1
   ];
 }
