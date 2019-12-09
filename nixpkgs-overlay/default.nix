@@ -63,7 +63,7 @@ let
         name = baseNameOf path;
         fetched = stdenv.mkDerivation {
           inherit version;
-          name = "https-${name}";
+          pname = "https-${name}";
           NIX_SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
           buildInputs = [ nix ];
           buildCommand = ''
@@ -192,7 +192,7 @@ in
 
       patched-src = with self; stdenv.mkDerivation
       {
-        inherit name;
+        pname = name;
         version = haxeshim-git.rev;
         src = haxeshim-git;
 
