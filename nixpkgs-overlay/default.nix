@@ -38,13 +38,52 @@ let
 
   fetch_haxe_library = with builtins; { name, uri, dest, buildOverrides }:
     let
-      matches = match "([^:]+):([^#]+)#(.*)" uri;
+      matches = match "([^:]+):([^#]+)#?(.*)?" uri;
       schema = head matches;
       path = elemAt matches 1;
       version = elemAt matches 2;
       esc = e: builtins.replaceStrings ["."] [","] e;
-    in {
+    in
+    {
       # Supported lix URIs
+      gh = stdenv.mkDerivation ({
+        name = "gh-${name}-${version}.git";
+        inherit version;
+        NIX_SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+        buildInputs = [ nix-prefetch-git ];
+        buildCommand = ''
+          nix-prefetch-git --rev ${version} --url 'https:${path}.git' 2>&1 |tee prefetch.out
+          store=$(cat prefetch.out |grep 'path is /nix/store/' |cut -d ' ' -f 3);
+          echo downloaded $uri rev: $version to: $store
+          ln -sv $store $out
+        '';
+      } // buildOverrides);
+
+      https = let
+        name = baseNameOf path;
+        fetched = stdenv.mkDerivation {
+          inherit version;
+          name = "https-${name}";
+          NIX_SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+          buildInputs = [ nix ];
+          buildCommand = ''
+            HASH_ZIP=$(nix-prefetch-url --name '${name}' --print-path '${uri}');
+            arr=($HASH_ZIP)
+            echo downloaded https ''${arr[1]} with SHA256 ''${arr[0]};
+            ln -sv ''${arr[1]} $out
+          '';
+        };
+      in
+      stdenv.mkDerivation ({
+        inherit name version;
+        buildInputs = [ unzip ];
+        src = fetched;
+        installPhase = ''
+          mkdir $out
+          mv -v * $out/
+        '';
+      } // buildOverrides);
+
       haxelib = let
         zip = stdenv.mkDerivation {
           name = "haxelib-${name}-${version}.zip";
@@ -64,11 +103,11 @@ let
         inherit version;
         buildInputs = [ unzip ];
         src = zip;
+        sourceRoot = ".";
         installPhase = ''
           echo installing haxelib $name
           mkdir $out
-          cd $out
-          unzip $src
+          mv -v * $out/
         '';
       } // buildOverrides);
     }."${schema}";
@@ -209,8 +248,31 @@ in
       '';
     in {
       inherit src haxe_libraries tool scoped;
+        buildInputs = [ scoped nodejs git ];
+
+        patchPhase = ''
+          ${patch_haxe_libraries_dir lix_haxe_libraries}
+          sed -i s"|-cp.*|-cp ${patched-src}/src|" haxe_libraries/haxeshim.hxml
+        '';
+
+        HAXELIB_PATH="/tmp";
+        buildPhase = ''
+          cp -v $haxe/.haxerc . # set scope to Haxe version
+          HOME=. npm install
+          haxe --run Build
+          chmod +x bin/*
+          ./bin/postinstall.js
+        '';
+
+        installPhase = ''
+          mkdir -p $out/bin
+          cp -a bin/lix.js $out/bin/lix
+        '';
+      };
     };
 
   # Our preferred Haxe 4.1 version
   haxe4_1 = with self; (haxeshim haxe_4_1_nightly).scoped;
+  haxe4_1 = self.haxeshim-haxe4_1.scoped;
+  lix = self.haxeshim-haxe4_1.lix;
 }
