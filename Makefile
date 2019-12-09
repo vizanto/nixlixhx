@@ -7,3 +7,7 @@ update-haxeshim:
 		| sed -e 's|\("fetchSubmodules": false\)|\1, "leaveDotGit": false|' > nixpkgs-overlay/haxeshim.json
 	nix-prefetch-git 'https://github.com/lix-pm/lix.client.git' \
 		| sed -e 's|\("fetchSubmodules": false\)|\1, "leaveDotGit": false|' > nixpkgs-overlay/lix.json
+
+update-hashlink:
+	nix-prefetch-git 'https://github.com/HaxeFoundation/hashlink.git' \
+		| sed -e 's|\("fetchSubmodules": false\)|\1, "leaveDotGit": false|' > nixpkgs-overlay/hashlink.json

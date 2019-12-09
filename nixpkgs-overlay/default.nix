@@ -326,4 +326,23 @@ in
   haxeshim-haxe4_1 = with self; (haxeshim haxe_4_1_nightly-bin);
   haxe4_1 = self.haxeshim-haxe4_1.scoped;
   lix = self.haxeshim-haxe4_1.lix;
+
+  hashlink = stdenv.mkDerivation {
+    name = "hashlink";
+    version = "git";
+    src = gitsrc "hashlink";
+
+    buildInputs = [
+        cmake
+        libjpeg_turbo
+        libogg
+        libpng
+        libuv
+        libvorbis
+        mbedtls
+        openalSoft
+        SDL2
+      ] ++
+      (with pkgs.darwin.apple_sdk.frameworks; [ Cocoa ]);
+  };
 }

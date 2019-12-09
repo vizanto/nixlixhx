@@ -10,5 +10,6 @@ mkShell {
     gnumake
     git
     lix
+    hashlink
   ];
 }
