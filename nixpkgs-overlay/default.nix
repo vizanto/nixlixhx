@@ -151,14 +151,7 @@ let
     echo --------------------------
   '';
 
-in
-{
-  ocamlPackages = ocamlPackages // extraOcamlPackages;
-
-  haxe_4_1_nightly-bin = haxe.overrideAttrs (old: {
-    version = "4.1.0-nightly";
-    src = gitsrc "haxe";
-
+  haxe4-attributes = {
     propagatedBuildInputs = [ neko ];
 
     buildInputs =
@@ -180,7 +173,13 @@ in
       sed -i -e 's|/usr/local|'"$out"'|g' Makefile
       sed -i -e 's|"neko"|"${neko}/bin/neko"|g' extra/haxelib_src/src/haxelib/client/Main.hx
     '';
-  });
+  };
+in
+{
+  ocamlPackages = ocamlPackages // extraOcamlPackages;
+
+  haxe_4_0_3-bin = haxe.overrideAttrs (old: { version = "4.0.3"; src = gitsrc "haxe-4.0.3"; } // haxe4-attributes);
+  haxe_4_1_nightly-bin = haxe.overrideAttrs (old: { version = "4.1.0-nightly"; src = gitsrc "haxe"; } // haxe4-attributes);
 
   inherit haxe_libraries_json;
 
@@ -333,10 +332,15 @@ in
       };
     };
 
-  # Our preferred Haxe 4.1 version
+  # lixified Haxe 4.1 (development branch)
   haxeshim-haxe4_1 = with self; (haxeshim haxe_4_1_nightly-bin);
   haxe4_1 = self.haxeshim-haxe4_1.scoped;
-  lix = self.haxeshim-haxe4_1.lix;
+  lix-nightly = self.haxeshim-haxe4_1.lix;
+
+  # lixified Haxe 4
+  haxeshim-haxe4 = with self; (haxeshim haxe_4_0_3-bin);
+  haxe4 = self.haxeshim-haxe4.scoped;
+  lix = self.haxeshim-haxe4.lix;
 
   hashlink = stdenv.mkDerivation {
     name = "hashlink";
