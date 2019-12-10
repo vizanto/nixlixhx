@@ -290,6 +290,9 @@ in
         patchPhase = ''
           ${patch_haxe_libraries_dir lix_haxe_libraries}
           sed -i s"|-cp.*|-cp ${patched-src}/src|" haxe_libraries/haxeshim.hxml
+          # Don't dowload into the nix store, but into HAXE_LIBCACHE/.downloads
+          sed -i s"|haxeshimRoot + '/downloads/|libCache + '/.downloads/|" \
+            src/lix/client/{Libraries.hx,haxe/Switcher.hx}
         '';
 
         HAXELIB_PATH="/tmp";
