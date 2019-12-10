@@ -248,19 +248,20 @@ in
         # Link neko and tools where haxeshim expects them
         find $(sed s'| |/bin|' $haxe/nix-support/propagated-build-inputs) -maxdepth 1 -not -type d -exec ln -vs '{}' ';'
 
-        cp -av $haxe/nix-support .
-        chmod +w nix-support/setup-hook
-
         mkdir $out/bin
         for f in $tool/bin/*; do
           cp -av $f $out/bin/$(basename $f "shim.js")
         done;
 
         # Configure haxeshim
-        echo 'export HAXE_ROOT="'$out'"' >> nix-support/setup-hook
         echo '{"version": "'$version'", "resolveLibs": "scoped"}' > .haxerc
+        mkdir haxelib nix-support
+        cat > nix-support/setup-hook <<______
+        # Set unwritable lix and haxelib caches by default
+        export HAXE_ROOT=$out
+        ______
 
-        # Set up shim
+        # Set up Haxe
         mkdir -p versions/$version
         pushd versions/$version
           echo '{"published": "'$(date -ud "$published" +'%Y-%m-%d %H:%M:%S')'"}' > version.json
@@ -284,7 +285,7 @@ in
 
         haxe = scoped;
         propagatedBuildInputs = [ neko ];
-
+        nativeBuildInputs = [ makeWrapper ];
         buildInputs = [ scoped git nodejs ]; #TODO: ++ (with nodePackages; [ ncc graceful-fs tar yauzl ]);
 
         patchPhase = ''
@@ -295,7 +296,6 @@ in
             src/lix/client/{Libraries.hx,haxe/Switcher.hx}
         '';
 
-        HAXELIB_PATH="/tmp";
         buildPhase = ''
           cp -v $haxe/.haxerc . # set scope to Haxe version
           # make sure postinstall.js exists for npm install to work
@@ -319,7 +319,15 @@ in
           # copy lix
           cp -av bin/lix.js $out/bin/lix
 
-          # copy Haxe support
+          # wrap lix and shims to provide user-friendly default cache locations
+          for prog in $out/bin/{haxe,haxelib,lix}; do
+            wrapProgram $prog \
+              --run 'export HAXE_CACHE=''${HAXE_CACHE-$HOME/${if stdenv.isDarwin then "Library/Caches/haxe" else "haxe"}}' \
+              --run 'export HAXE_LIBCACHE=''${HAXE_LIBCACHE-$HAXE_CACHE/haxe_libraries}' \
+              --run 'export HAXELIB_PATH=''${HAXELIB_PATH-$HAXE_CACHE/haxelib}'
+          done;
+
+          # copy Haxe shim support
           cp -av $haxe/nix-support $out
         '';
       };
