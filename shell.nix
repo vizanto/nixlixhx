@@ -4,12 +4,21 @@
 
 with import pkgsPath { overlays = [ (import ./nixpkgs-overlay) ]; };
 
-mkShell {
-  buildInputs = [
-    coreutils
+let
+  packages = [
+    coreutils-full # includes man pages
     gnumake
     git
     lix
     hashlink
+    neko
   ];
+  symlinks = buildEnv {
+    name = "mdhx-bin";
+    paths = packages;
+    pathsToLink = ["/bin"];
+  };
+in mkShell {
+  buildInputs = packages;
+  inherit symlinks;
 }
