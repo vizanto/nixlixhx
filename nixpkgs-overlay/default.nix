@@ -359,5 +359,10 @@ in
         SDL2
       ] ++
       (with pkgs.darwin.apple_sdk.frameworks; [ Cocoa ]);
+
+    postInstall = ''
+      cd ..
+      cp -v src/hlc_main.c $out/include
+    '';
   };
 }

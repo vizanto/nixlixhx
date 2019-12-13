@@ -8,6 +8,7 @@ let
   packages = [
     coreutils-full # includes man pages
     gnumake
+    clang
     git
     lix
     hashlink
@@ -21,4 +22,5 @@ let
 in mkShell {
   buildInputs = packages;
   inherit symlinks;
+  inherit hashlink;
 }

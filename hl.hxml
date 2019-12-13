@@ -1,0 +1,5 @@
+--main Main
+--dce full
+
+--hl .out/mdhx.c
+--cmd gcc -Os -I $hashlink/include/ -L $hashlink/lib/ -lhl -I .out .out/mdhx.c -o mdhx
