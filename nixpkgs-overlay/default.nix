@@ -253,7 +253,7 @@ in
         done;
 
         # Configure haxeshim
-        echo '{"version": "'$version'", "resolveLibs": "scoped"}' > .haxerc
+        echo -n '{"version":"'$version'","resolveLibs":"scoped"}' > .haxerc
         mkdir haxelib nix-support
         cat > nix-support/setup-hook <<______
         # Set unwritable lix and haxelib caches by default
