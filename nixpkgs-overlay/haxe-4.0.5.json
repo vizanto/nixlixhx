@@ -1,0 +1,7 @@
+{
+  "url": "https://github.com/HaxeFoundation/haxe.git",
+  "rev": "67feacebc59d5cd9dce232058f12cb933622d619",
+  "date": "2019-12-17T11:27:01+03:00",
+  "sha256": "1k05j6vj5byiir7bv6qvnxbzmzkrmbv5by8f02p1z78s9kgcdxxk",
+  "fetchSubmodules": true, "leaveDotGit": true
+}

@@ -178,7 +178,7 @@ in
 {
   ocamlPackages = ocamlPackages // extraOcamlPackages;
 
-  haxe_4_0_3-bin = haxe.overrideAttrs (old: { version = "4.0.3"; src = gitsrc "haxe-4.0.3"; } // haxe4-attributes);
+  haxe_4_0_5-bin = haxe.overrideAttrs (old: { version = "4.0.5"; src = gitsrc "haxe-4.0.5"; } // haxe4-attributes);
   haxe_4_1_nightly-bin = haxe.overrideAttrs (old: { version = "4.1.0-nightly"; src = gitsrc "haxe"; } // haxe4-attributes);
 
   inherit haxe_libraries_json;
@@ -338,7 +338,7 @@ in
   lix-nightly = self.haxeshim-haxe4_1.lix;
 
   # lixified Haxe 4
-  haxeshim-haxe4 = with self; (haxeshim haxe_4_0_3-bin);
+  haxeshim-haxe4 = with self; (haxeshim haxe_4_0_5-bin);
   haxe4 = self.haxeshim-haxe4.scoped;
   lix = self.haxeshim-haxe4.lix;
 
